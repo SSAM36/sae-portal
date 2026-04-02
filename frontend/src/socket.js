@@ -1,5 +1,8 @@
 import { io } from 'socket.io-client';
 
-const URL = import.meta.env.MODE === 'production' ? window.location.origin : 'http://localhost:3001';
+const URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
-export const socket = io(URL);
+export const socket = io(URL, {
+	transports: ['websocket', 'polling'],
+	autoConnect: true,
+});
