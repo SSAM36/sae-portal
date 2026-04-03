@@ -56,8 +56,8 @@ export function Layout() {
       <aside className={`fixed inset-y-0 left-0 z-40 h-dvh w-72 bg-white border-r border-slate-200 flex flex-col shadow-sm transform transition-transform duration-200 ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
         <div className="h-16 flex items-center px-6 border-b border-slate-100">
           <div className="flex items-center gap-3 text-blue-600">
-            <Users className="w-6 h-6" />
-            <span className="text-xl font-bold tracking-tight">DJS Interview Hub</span>
+            <img src="/download.png" alt="SAE Portal Logo" className="h-14 w-14 rounded-sm object-contain" />
+            <span className="text-xl font-bold tracking-tight">SAE Portal</span>
           </div>
           <button
             type="button"

@@ -149,6 +149,20 @@ const TeamDashboard = () => {
     return <Badge variant="muted">{status}</Badge>;
   };
 
+  const getPreferenceChipClass = (status) => {
+    const normalized = String(status || '').toLowerCase();
+
+    if (normalized.includes('completed')) {
+      return 'border-emerald-300 bg-emerald-100 text-emerald-800';
+    }
+
+    if (normalized.includes('progress') || normalized.includes('hold') || normalized.includes('interview')) {
+      return 'border-amber-300 bg-amber-100 text-amber-800';
+    }
+
+    return 'border-slate-200 bg-white text-slate-600';
+  };
+
   const arrivedCandidates = useMemo(() => applicants.filter((applicant) => applicant.arrived), [applicants]);
 
   const branchCounts = useMemo(() => arrivedCandidates.reduce((acc, applicant) => {
@@ -205,7 +219,7 @@ const TeamDashboard = () => {
       </div>
 
       {feedback ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 shadow-sm">
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm">
           {feedback}
         </div>
       ) : null}
@@ -284,8 +298,11 @@ const TeamDashboard = () => {
                   <div className="font-semibold text-slate-900 group-hover:text-indigo-700 transition-colors">{applicant.name}</div>
                   <div className="text-xs text-slate-500 font-mono mt-0.5">{applicant.sap_id}</div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {(applicant.teams || []).slice(0, 4).map((team) => (
-                      <span key={team} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    {(applicant.teams || []).map((team) => (
+                      <span
+                        key={team}
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${getPreferenceChipClass(applicant.interview_status?.[team])}`}
+                      >
                         {team}
                       </span>
                     ))}

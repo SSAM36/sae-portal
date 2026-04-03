@@ -69,6 +69,16 @@ const formatSupabaseError = (error) => {
 const readDuplicateOrigin = (applicant) => applicant?.interview_status?._duplicateSap || null;
 
 const makeDuplicateSapId = (sapId, seed) => `${sapId}-DUP-${seed}`;
+const DEPARTMENT_COLUMN_CANDIDATES = ['department', 'branch', 'dept'];
+
+const buildDepartmentPayload = (candidate, departmentColumn) => {
+  const departmentValue = candidate.department || candidate.branch || candidate.dept || 'Other';
+  const { department, branch, dept, ...rest } = candidate;
+  return {
+    ...rest,
+    [departmentColumn]: departmentValue,
+  };
+};
 
 const normalizeApplicant = (row) => {
   const teams = Array.isArray(row?.teams)
@@ -181,6 +191,50 @@ const AdminDashboard = () => {
     };
   };
 
+  const detectDepartmentColumn = () => {
+    if (applicants.length === 0) return 'department';
+
+    const sample = applicants[0] || {};
+    for (const key of DEPARTMENT_COLUMN_CANDIDATES) {
+      if (Object.prototype.hasOwnProperty.call(sample, key)) {
+        return key;
+      }
+    }
+
+    return 'department';
+  };
+
+  const insertApplicantsWithDepartmentFallback = async (rows) => {
+    const preferred = detectDepartmentColumn();
+    const columnTryOrder = [
+      preferred,
+      ...DEPARTMENT_COLUMN_CANDIDATES.filter((key) => key !== preferred),
+    ];
+
+    let lastError = null;
+
+    for (const column of columnTryOrder) {
+      const payload = rows.map((candidate) => buildDepartmentPayload(candidate, column));
+      const { error } = await supabase.from('applicants').insert(payload);
+
+      if (!error) {
+        return { error: null };
+      }
+
+      lastError = error;
+      const message = String(error.message || '').toLowerCase();
+      const isSchemaColumnError =
+        error.code === 'PGRST204' &&
+        (message.includes("'department'") || message.includes("'branch'") || message.includes("'dept'"));
+
+      if (!isSchemaColumnError) {
+        return { error };
+      }
+    }
+
+    return { error: lastError };
+  };
+
   const handleAddApplicant = async (e) => {
     e.preventDefault();
 
@@ -224,7 +278,7 @@ const AdminDashboard = () => {
         }
       : baseCandidate;
 
-    const { error } = await supabase.from('applicants').insert([candidateToInsert]);
+    const { error } = await insertApplicantsWithDepartmentFallback([candidateToInsert]);
 
     if (error) {
       setFeedback(`Unable to add walk-in: ${formatSupabaseError(error)}`);
@@ -324,7 +378,7 @@ const AdminDashboard = () => {
           return duplicateCandidate;
         });
 
-        const { error } = await supabase.from('applicants').insert(payload);
+        const { error } = await insertApplicantsWithDepartmentFallback(payload);
 
         if (error) {
           setFeedback(`Import failed: ${formatSupabaseError(error)}`);
@@ -382,6 +436,20 @@ const AdminDashboard = () => {
     return <Badge variant="muted">{status}</Badge>;
   };
 
+  const getPreferenceChipClass = (status) => {
+    const normalized = String(status || '').toLowerCase();
+
+    if (normalized.includes('completed')) {
+      return 'border-emerald-300 bg-emerald-100 text-emerald-800';
+    }
+
+    if (normalized.includes('progress') || normalized.includes('hold') || normalized.includes('interview')) {
+      return 'border-amber-300 bg-amber-100 text-amber-800';
+    }
+
+    return 'border-slate-200 bg-white text-slate-600';
+  };
+
   const filteredApplicants = useMemo(() => {
     const query = deferredSearch.toLowerCase();
     const byQuery = applicants.filter((applicant) => {
@@ -429,7 +497,7 @@ const AdminDashboard = () => {
       </div>
 
       {feedback ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm">
           {feedback}
         </div>
       ) : null}
@@ -589,7 +657,10 @@ const AdminDashboard = () => {
                   <TableCell>
                     <div className="flex flex-wrap gap-1.5">
                       {preferenceList.length > 0 ? preferenceList.map((team) => (
-                        <span key={team} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200">
+                        <span
+                          key={team}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${getPreferenceChipClass(applicant.interview_status?.[team])}`}
+                        >
                           {team}
                         </span>
                       )) : <span className="text-sm text-slate-400">No preferences stored</span>}
