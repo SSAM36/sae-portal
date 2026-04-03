@@ -71,6 +71,17 @@ const TeamDashboard = () => {
     setApplicants(data || []);
   };
 
+  const isApplicantCompleted = (applicant) => {
+    const appliedTeams = applicant.teams || [];
+    return appliedTeams.every((team) => applicant.interview_status?.[team] === 'Completed');
+  };
+
+  const isActionDisabled = (applicant) => {
+    const isWithDifferentTeam = applicant.current_team !== null && applicant.current_team !== teamLabel;
+    const isCompletedAllTeams = isApplicantCompleted(applicant);
+    return isWithDifferentTeam || isCompletedAllTeams;
+  };
+
   const handleInterviewAction = async (applicantId, newStatus) => {
     const applicant = applicants.find((candidate) => candidate.id === applicantId);
     if (!applicant) return;
@@ -81,12 +92,29 @@ const TeamDashboard = () => {
     }
 
     const newInterviewStatus = { ...(applicant.interview_status || {}), [teamLabel]: newStatus };
-    const newCurrentTeam = newStatus === 'Completed' ? null : teamLabel;
-    const newCurrentStatus = newStatus === 'In Progress'
-      ? `Interviewing with ${teamLabel}`
-      : newStatus === 'On Hold'
-        ? `On Hold with ${teamLabel}`
-        : newStatus;
+    const appliedTeams = applicant.teams || [];
+
+    let newCurrentStatus;
+    let newCurrentTeam;
+
+    if (newStatus === 'Completed') {
+      const allTeamsCompleted = appliedTeams.every((team) => {
+        const status = team === teamLabel ? newStatus : newInterviewStatus[team];
+        return status === 'Completed';
+      });
+
+      newCurrentTeam = null;
+      newCurrentStatus = allTeamsCompleted ? 'Completed' : 'In Progress';
+    } else if (newStatus === 'In Progress') {
+      newCurrentTeam = teamLabel;
+      newCurrentStatus = `Interviewing with ${teamLabel}`;
+    } else if (newStatus === 'On Hold') {
+      newCurrentTeam = teamLabel;
+      newCurrentStatus = `On Hold with ${teamLabel}`;
+    } else {
+      newCurrentTeam = null;
+      newCurrentStatus = newStatus;
+    }
 
     const { data, error } = await supabase
       .from('applicants')
@@ -280,10 +308,7 @@ const TeamDashboard = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleInterviewAction(applicant.id, 'In Progress')}
-                      disabled={
-                        (applicant.current_team !== null && applicant.current_team !== teamLabel) ||
-                        (applicant.interview_status && applicant.interview_status[teamLabel] === 'Completed')
-                      }
+                      disabled={isActionDisabled(applicant)}
                       className="border-blue-200 text-blue-700 hover:bg-blue-50"
                     >
                       <PlayCircle className="w-4 h-4 mr-1.5" /> Start
@@ -292,7 +317,7 @@ const TeamDashboard = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleInterviewAction(applicant.id, 'On Hold')}
-                      disabled={applicant.interview_status?.[teamLabel] === 'Completed'}
+                      disabled={isActionDisabled(applicant)}
                       className="border-amber-200 text-amber-700 hover:bg-amber-50"
                     >
                       <PauseCircle className="w-4 h-4 mr-1.5" /> Hold
@@ -301,7 +326,7 @@ const TeamDashboard = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleInterviewAction(applicant.id, 'Completed')}
-                      disabled={applicant.interview_status?.[teamLabel] === 'Completed'}
+                      disabled={isActionDisabled(applicant)}
                       className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                     >
                       <CheckCircle2 className="w-4 h-4 mr-1.5" /> Pass
