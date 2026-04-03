@@ -15,6 +15,7 @@ const emptyApplicant = {
   name: '',
   sap_id: '',
   phone_number: '',
+  branch: '',
 };
 
 const getCellValue = (row, matcher) => {
@@ -45,6 +46,14 @@ const getPreferenceValues = (row) => {
     row.teams,
     row.appliedTeams,
   ]);
+};
+
+const getBranchValue = (row) => {
+  const value = getCellValue(row, (header) =>
+    header.includes('branch') || header.includes('dept') || header.includes('department')
+  );
+
+  return String(value || '').trim();
 };
 
 const formatSupabaseError = (error) => {
@@ -78,6 +87,7 @@ const normalizeApplicant = (row) => {
     name: row?.name || row?.full_name || '',
     sap_id: String(row?.sap_id || ''),
     phone_number: row?.phone_number || row?.phone || '',
+    branch: row?.branch || row?.department || row?.dept || 'Other',
     teams,
     arrived,
     current_team: row?.current_team || null,
@@ -94,6 +104,8 @@ const AdminDashboard = () => {
   const [importFile, setImportFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
   const [search, setSearch] = useState('');
+  const [branchFilter, setBranchFilter] = useState('All');
+  const [sortMode, setSortMode] = useState('name-asc');
   const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
@@ -159,6 +171,7 @@ const AdminDashboard = () => {
       name: record.name,
       sap_id: duplicateOrigin ? makeDuplicateSapId(record.sap_id, suffixSeed) : record.sap_id,
       phone_number: record.phone_number,
+      branch: record.branch || 'Other',
       teams,
       arrived: false,
       current_status: duplicateOrigin ? 'Not Arrived (Duplicate SAP)' : 'Not Arrived',
@@ -255,6 +268,7 @@ const AdminDashboard = () => {
           name: String(getCellValue(row, (header) => header.includes('name')) || '').trim(),
           sap_id: String(getCellValue(row, (header) => header.includes('sap')) || '').trim(),
           phone_number: String(getCellValue(row, (header) => header.includes('phone')) || '').trim(),
+          branch: getBranchValue(row) || 'Other',
           teams: getPreferenceValues(row),
         }));
 
@@ -366,23 +380,48 @@ const AdminDashboard = () => {
 
   const filteredApplicants = useMemo(() => {
     const query = search.toLowerCase();
-    return applicants.filter((applicant) => {
+    const byQuery = applicants.filter((applicant) => {
       const preferenceList = applicant.teams || [];
+      const branch = String(applicant.branch || 'Other');
       return (
         String(applicant.name || '').toLowerCase().includes(query) ||
         String(applicant.sap_id || '').toLowerCase().includes(query) ||
+        branch.toLowerCase().includes(query) ||
         preferenceList.join(' ').toLowerCase().includes(query)
       );
     });
-  }, [applicants, search]);
+
+    const byBranch = branchFilter === 'All'
+      ? byQuery
+      : byQuery.filter((applicant) => String(applicant.branch || 'Other') === branchFilter);
+
+    const sorted = [...byBranch].sort((a, b) => {
+      if (sortMode === 'dept-asc') return String(a.branch || 'Other').localeCompare(String(b.branch || 'Other'));
+      if (sortMode === 'dept-desc') return String(b.branch || 'Other').localeCompare(String(a.branch || 'Other'));
+      if (sortMode === 'name-desc') return String(b.name || '').localeCompare(String(a.name || ''));
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+    return sorted;
+  }, [applicants, search, branchFilter, sortMode]);
+
+  const branchCounts = useMemo(() => {
+    const counts = applicants.reduce((acc, applicant) => {
+      const key = String(applicant.branch || 'Other');
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    return counts;
+  }, [applicants]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
+    <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
       <div className="flex flex-col gap-2 relative z-10">
-        <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
-          <Users className="w-8 h-8 text-blue-600" /> Registration Desk
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
+          <Users className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-blue-600" /> Registration Desk
         </h1>
-        <p className="text-slate-500 max-w-2xl text-lg">Database-backed roster with real-time sync across all dashboards.</p>
+        <p className="text-slate-500 max-w-2xl text-sm sm:text-base lg:text-lg">Database-backed roster with real-time sync across all dashboards.</p>
       </div>
 
       {feedback ? (
@@ -391,7 +430,7 @@ const AdminDashboard = () => {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 relative z-10">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 relative z-10">
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center"><UploadCloud className="w-5 h-5 mr-2 text-indigo-500" /> Spreadsheet Import</CardTitle>
@@ -413,9 +452,10 @@ const AdminDashboard = () => {
             <CardDescription>Add a candidate on the spot and store instantly in the database.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleAddApplicant} className="grid grid-cols-2 gap-3">
-              <Input placeholder="Full Name" name="name" value={newApplicant.name} onChange={handleInputChange} required className="col-span-2 sm:col-span-1" />
-              <Input placeholder="SAP ID" name="sap_id" value={newApplicant.sap_id} onChange={handleInputChange} required className="col-span-2 sm:col-span-1" />
+            <form onSubmit={handleAddApplicant} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input placeholder="Full Name" name="name" value={newApplicant.name} onChange={handleInputChange} required className="sm:col-span-1" />
+              <Input placeholder="SAP ID" name="sap_id" value={newApplicant.sap_id} onChange={handleInputChange} required className="sm:col-span-1" />
+              <Input placeholder="Department (e.g. EXTC)" name="branch" value={newApplicant.branch} onChange={handleInputChange} required className="sm:col-span-1" />
               <Input placeholder="Phone Number" name="phone_number" value={newApplicant.phone_number} onChange={handleInputChange} required className="col-span-2" />
 
               <div className="col-span-2 space-y-3">
@@ -427,7 +467,7 @@ const AdminDashboard = () => {
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{selectedPreferences.length}/11 selected</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {TEAM_LABELS.map((team) => {
                     const selected = selectedPreferences.includes(team);
                     return (
@@ -469,10 +509,51 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        <Table className="border-0">
+        <div className="px-4 md:px-6 py-3 border-b border-slate-200 bg-slate-50/70 flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={branchFilter === 'All' ? 'default' : 'outline'}
+              onClick={() => setBranchFilter('All')}
+            >
+              All ({applicants.length})
+            </Button>
+            {Object.entries(branchCounts)
+              .sort((a, b) => a[0].localeCompare(b[0]))
+              .map(([branch, count]) => (
+                <Button
+                  key={branch}
+                  type="button"
+                  size="sm"
+                  variant={branchFilter === branch ? 'default' : 'outline'}
+                  onClick={() => setBranchFilter(branch)}
+                >
+                  {branch} ({count})
+                </Button>
+              ))}
+          </div>
+
+          <div className="w-full sm:w-60">
+            <select
+              className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value)}
+            >
+              <option value="name-asc">Sort: Name A-Z</option>
+              <option value="name-desc">Sort: Name Z-A</option>
+              <option value="dept-asc">Sort: Dept A-Z</option>
+              <option value="dept-desc">Sort: Dept Z-A</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="w-full overflow-x-auto">
+        <Table className="border-0 min-w-[980px]">
           <TableHeader>
             <TableRow>
               <TableHead className="w-[220px]">Candidate Details</TableHead>
+              <TableHead>Department</TableHead>
               <TableHead>Preferences</TableHead>
               <TableHead>Check-In</TableHead>
               <TableHead>Global State</TableHead>
@@ -495,6 +576,11 @@ const AdminDashboard = () => {
                       </div>
                     ) : null}
                     <div className="text-xs text-slate-400 mt-0.5">{applicant.phone_number}</div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="info" className="text-[10px] uppercase">
+                      {applicant.branch || 'Other'}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1.5">
@@ -530,13 +616,14 @@ const AdminDashboard = () => {
               );
             }) : (
               <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center text-slate-500">
+                <TableCell colSpan={6} className="h-32 text-center text-slate-500">
                   No applicants found matching "{search}"
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
+        </div>
       </Card>
     </div>
   );

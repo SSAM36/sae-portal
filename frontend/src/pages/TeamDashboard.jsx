@@ -16,6 +16,8 @@ const TeamDashboard = () => {
   const { user } = useAuth();
   const [applicants, setApplicants] = useState([]);
   const [search, setSearch] = useState('');
+  const [branchFilter, setBranchFilter] = useState('All');
+  const [sortMode, setSortMode] = useState('name-asc');
   const [feedback, setFeedback] = useState('');
   const teamConfig = getTeamByRouteId(teamName);
   const teamLabel = teamConfig?.displayName || String(teamName || '').toUpperCase();
@@ -57,7 +59,7 @@ const TeamDashboard = () => {
   const fetchApplicants = async (team) => {
     const { data, error } = await supabase
       .from('applicants')
-      .select('id,name,sap_id,phone_number,teams,arrived,current_status,current_team,interview_status')
+      .select('*')
       .filter('teams', 'cs', `{${team}}`);
 
     if (error) {
@@ -119,23 +121,43 @@ const TeamDashboard = () => {
   };
 
   const arrivedCandidates = applicants.filter((applicant) => applicant.arrived);
-  const filteredCandidates = arrivedCandidates.filter((candidate) =>
-    candidate.name.toLowerCase().includes(search.toLowerCase()) ||
-    candidate.sap_id.toLowerCase().includes(search.toLowerCase())
-  );
+  const branchCounts = arrivedCandidates.reduce((acc, applicant) => {
+    const key = String(applicant.branch || 'Other');
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  const filteredCandidates = [...arrivedCandidates]
+    .filter((candidate) => {
+      const query = search.toLowerCase();
+      const branch = String(candidate.branch || 'Other');
+      const matchesQuery =
+        candidate.name.toLowerCase().includes(query) ||
+        candidate.sap_id.toLowerCase().includes(query) ||
+        branch.toLowerCase().includes(query);
+
+      const matchesBranch = branchFilter === 'All' || branch === branchFilter;
+      return matchesQuery && matchesBranch;
+    })
+    .sort((a, b) => {
+      if (sortMode === 'dept-asc') return String(a.branch || 'Other').localeCompare(String(b.branch || 'Other'));
+      if (sortMode === 'dept-desc') return String(b.branch || 'Other').localeCompare(String(a.branch || 'Other'));
+      if (sortMode === 'name-desc') return String(b.name || '').localeCompare(String(a.name || ''));
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-6xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 relative z-10">
+    <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 max-w-6xl mx-auto">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 relative z-10">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
-            <MonitorSmartphone className="w-8 h-8 text-indigo-600" />
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-slate-900 flex items-center gap-3">
+            <MonitorSmartphone className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-indigo-600" />
             {teamLabel} Operations
           </h1>
-          <p className="text-slate-500 mt-2 text-lg">Live queue updates from the database with no refresh needed.</p>
+          <p className="text-slate-500 mt-2 text-sm sm:text-base lg:text-lg">Live queue updates from the database with no refresh needed.</p>
         </div>
 
-        <div className="flex gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full sm:w-auto">
           <div className="bg-white rounded-lg border border-slate-200 px-4 py-2 shadow-sm flex flex-col items-center">
             <span className="text-2xl font-bold text-slate-900">{arrivedCandidates.length}</span>
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Queue</span>
@@ -155,6 +177,45 @@ const TeamDashboard = () => {
         </div>
       ) : null}
 
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm flex flex-col gap-3">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={branchFilter === 'All' ? 'default' : 'outline'}
+            onClick={() => setBranchFilter('All')}
+          >
+            All ({arrivedCandidates.length})
+          </Button>
+          {Object.entries(branchCounts)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([branch, count]) => (
+              <Button
+                key={branch}
+                type="button"
+                size="sm"
+                variant={branchFilter === branch ? 'default' : 'outline'}
+                onClick={() => setBranchFilter(branch)}
+              >
+                {branch} ({count})
+              </Button>
+            ))}
+        </div>
+
+        <div className="w-full sm:w-60">
+          <select
+            className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value)}
+          >
+            <option value="name-asc">Sort: Name A-Z</option>
+            <option value="name-desc">Sort: Name Z-A</option>
+            <option value="dept-asc">Sort: Dept A-Z</option>
+            <option value="dept-desc">Sort: Dept Z-A</option>
+          </select>
+        </div>
+      </div>
+
       <Card className="shadow-sm border-t-4 border-t-indigo-600">
         <div className="bg-white px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -172,10 +233,12 @@ const TeamDashboard = () => {
           </div>
         </div>
 
-        <Table className="border-0">
+        <div className="w-full overflow-x-auto">
+        <Table className="border-0 min-w-[980px]">
           <TableHeader>
             <TableRow className="bg-slate-50/80">
               <TableHead className="w-[280px]">Candidate Details</TableHead>
+              <TableHead>Department</TableHead>
               <TableHead>Global State</TableHead>
               <TableHead>Team Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -196,13 +259,18 @@ const TeamDashboard = () => {
                   </div>
                 </TableCell>
                 <TableCell>
+                  <Badge variant="info" className="text-[10px] uppercase">
+                    {applicant.branch || 'Other'}
+                  </Badge>
+                </TableCell>
+                <TableCell>
                   {getStatusBadge(applicant.current_status)}
                 </TableCell>
                 <TableCell>
                   {getStatusBadge(applicant.interview_status?.[teamLabel])}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col sm:flex-row justify-end gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -243,7 +311,7 @@ const TeamDashboard = () => {
               </TableRow>
             )) : (
               <TableRow>
-                <TableCell colSpan={4} className="h-40 text-center text-slate-500">
+                <TableCell colSpan={5} className="h-40 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Target className="w-8 h-8 text-slate-300" />
                     <span>No active candidates available for your team.</span>
@@ -253,6 +321,7 @@ const TeamDashboard = () => {
             )}
           </TableBody>
         </Table>
+        </div>
       </Card>
     </div>
   );
