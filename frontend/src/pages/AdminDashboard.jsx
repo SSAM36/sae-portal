@@ -8,7 +8,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { Users, UploadCloud, UserPlus, Search, CheckCircle2, Clock, HelpCircle, Activity, CheckSquare } from 'lucide-react';
+import { Users, UploadCloud, UserPlus, Search, CheckCircle2, Clock, HelpCircle, Activity, CheckSquare, Download } from 'lucide-react';
 import { TEAM_LABELS, buildInterviewStatus, resolveTeamList } from '../data/interviewTeams';
 
 const emptyApplicant = {
@@ -119,6 +119,55 @@ const AdminDashboard = () => {
   const [feedback, setFeedback] = useState('');
   const deferredSearch = useDeferredValue(search);
 
+  const isWalkInApplicant = (applicant) => {
+    const source = applicant?.interview_status?._source;
+    const status = String(applicant?.current_status || '').toLowerCase();
+    return source === 'walkin' || status === 'arrived (duplicate sap)';
+  };
+
+  const getExportTeamStatus = (applicant, team) => {
+    if (!(applicant?.teams || []).includes(team)) return 'Not Applied';
+
+    const normalized = String(applicant?.interview_status?.[team] || 'Not Started').toLowerCase();
+
+    if (normalized.includes('completed')) return 'Completed';
+    if (normalized.includes('progress') || normalized.includes('hold') || normalized.includes('interview')) return 'Started';
+    return 'Not Started';
+  };
+
+  const buildExportRow = (applicant) => ({
+    Name: applicant?.name || '',
+    'SAP ID': applicant?.sap_id || '',
+    'Phone Number': applicant?.phone_number || '',
+    Department: applicant?.branch || 'Other',
+    Arrived: applicant?.arrived ? 'Yes' : 'No',
+    'Current Status': applicant?.current_status || '',
+    'Current Team': applicant?.current_team || '',
+    'Interview Source': applicant?.interview_status?._source || 'legacy',
+    ...TEAM_LABELS.reduce((statusMap, team) => {
+      statusMap[team] = getExportTeamStatus(applicant, team);
+      return statusMap;
+    }, {}),
+  });
+
+  const handleExportExcel = () => {
+    if (applicants.length === 0) {
+      setFeedback('No applicants available to export.');
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    const allRows = applicants.map(buildExportRow);
+    const walkInRows = applicants.filter(isWalkInApplicant).map(buildExportRow);
+
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(allRows), 'All Students');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(walkInRows), 'Walk-ins');
+
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `sae-portal-export-${today}.xlsx`);
+    setFeedback(`Exported ${allRows.length} students and ${walkInRows.length} walk-ins.`);
+  };
+
   useEffect(() => {
     fetchApplicants();
 
@@ -171,11 +220,12 @@ const AdminDashboard = () => {
     setNewApplicant((prev) => ({ ...prev, [name]: value }));
   };
 
-  const prepareCandidate = (record, duplicateOrigin, suffixSeed) => {
+  const prepareCandidate = (record, duplicateOrigin, suffixSeed, source = 'roster') => {
     const teams = record.teams || [];
     const interviewStatus = {
       ...buildInterviewStatus(teams),
       ...(duplicateOrigin ? { _duplicateSap: duplicateOrigin } : {}),
+      _source: source,
     };
 
     return {
@@ -252,7 +302,10 @@ const AdminDashboard = () => {
       arrived: true,
       current_status: 'Arrived',
       current_team: null,
-      interview_status: buildInterviewStatus(selectedPreferences),
+      interview_status: {
+        ...buildInterviewStatus(selectedPreferences),
+        _source: 'walkin',
+      },
     };
 
     const { data: existingRows, error: existingError } = await supabase
@@ -570,14 +623,19 @@ const AdminDashboard = () => {
             <CardTitle className="text-xl">Active Roster</CardTitle>
             <CardDescription className="mt-1">All {applicants.length} registered candidates</CardDescription>
           </div>
-          <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <Input
-              placeholder="Search by name, SAP ID, or team"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-10 w-full"
-            />
+          <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto">
+            <Button type="button" onClick={handleExportExcel} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700">
+              <Download className="w-4 h-4 mr-2" /> Export Excel
+            </Button>
+            <div className="relative w-full sm:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <Input
+                placeholder="Search by name, SAP ID, or team"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 h-10 w-full"
+              />
+            </div>
           </div>
         </div>
 
