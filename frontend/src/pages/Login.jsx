@@ -30,7 +30,7 @@ export const Login = () => {
         navigate('/');
       }
     } catch (err) {
-      setError('Invalid credentials.');
+      setError(err?.message || 'Invalid credentials.');
     }
   };
 

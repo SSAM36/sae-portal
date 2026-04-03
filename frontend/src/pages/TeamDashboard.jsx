@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { PlayCircle, PauseCircle, CheckCircle2, AlertCircle, MonitorSmartphone, Target, SearchIcon } from 'lucide-react';
 import { getTeamByRouteId, resolveTeamList } from '../data/interviewTeams';
 
+const UNLOCK_PASSWORD = import.meta.env.VITE_UNLOCK_PASSWORD;
+
 const TeamDashboard = () => {
   const { teamName } = useParams();
   const { user } = useAuth();
@@ -76,22 +78,113 @@ const TeamDashboard = () => {
     return appliedTeams.every((team) => applicant.interview_status?.[team] === 'Completed');
   };
 
-  const isActionDisabled = (applicant) => {
+  const isCurrentTeamCompleted = (applicant) => applicant.interview_status?.[teamLabel] === 'Completed';
+
+  const isGlobalCompleted = (applicant) => isApplicantCompleted(applicant);
+
+  const getActionLockReason = (applicant) => {
     const isWithDifferentTeam = applicant.current_team !== null && applicant.current_team !== teamLabel;
-    const isCompletedAllTeams = isApplicantCompleted(applicant);
-    return isWithDifferentTeam || isCompletedAllTeams;
+    if (isWithDifferentTeam) return 'other-team';
+    if (isCurrentTeamCompleted(applicant) || isGlobalCompleted(applicant)) return 'completed';
+    return null;
+  };
+
+  const handleUnlockCompleted = async (applicant) => {
+    if (getActionLockReason(applicant) !== 'completed') return;
+
+    if (!UNLOCK_PASSWORD) {
+      setFeedback('Unlock password is not configured. Set VITE_UNLOCK_PASSWORD.');
+      return;
+    }
+
+    const unlockPassword = window.prompt('Enter unlock password');
+    if (unlockPassword === null) return;
+
+    if (unlockPassword.trim() !== UNLOCK_PASSWORD) {
+      setFeedback('Incorrect unlock password.');
+      return;
+    }
+
+    const previousByTeam = applicant?.interview_status?._lastStatusByTeam || {};
+    const restoredTeamStatus = previousByTeam[teamLabel] || 'Not Started';
+    const updatedInterviewStatus = {
+      ...(applicant.interview_status || {}),
+      [teamLabel]: restoredTeamStatus,
+    };
+
+    const nextLastStatusMap = { ...previousByTeam };
+    delete nextLastStatusMap[teamLabel];
+    if (Object.keys(nextLastStatusMap).length > 0) {
+      updatedInterviewStatus._lastStatusByTeam = nextLastStatusMap;
+    } else {
+      delete updatedInterviewStatus._lastStatusByTeam;
+    }
+
+    const appliedTeams = applicant.teams || [];
+    const allTeamsCompleted = appliedTeams.every((team) => updatedInterviewStatus[team] === 'Completed');
+
+    let restoredCurrentTeam;
+    let restoredCurrentStatus;
+
+    if (allTeamsCompleted) {
+      restoredCurrentTeam = null;
+      restoredCurrentStatus = 'Completed';
+    } else if (restoredTeamStatus === 'In Progress') {
+      restoredCurrentTeam = teamLabel;
+      restoredCurrentStatus = `Interviewing with ${teamLabel}`;
+    } else if (restoredTeamStatus === 'On Hold') {
+      restoredCurrentTeam = teamLabel;
+      restoredCurrentStatus = `On Hold with ${teamLabel}`;
+    } else {
+      restoredCurrentTeam = null;
+      restoredCurrentStatus = 'In Progress';
+    }
+
+    const { data, error } = await supabase
+      .from('applicants')
+      .update({
+        interview_status: updatedInterviewStatus,
+        current_team: restoredCurrentTeam,
+        current_status: restoredCurrentStatus,
+      })
+      .eq('id', applicant.id)
+      .select()
+      .single();
+
+    if (error) {
+      setFeedback('Unable to unlock candidate state.');
+      return;
+    }
+
+    setFeedback('Candidate unlocked successfully.');
+    setApplicants((prev) => prev.map((candidate) => (candidate.id === applicant.id ? data : candidate)));
+    logActivity(user.username, `Unlocked ${applicant.name} for ${teamLabel}; restored status to ${restoredTeamStatus}`);
   };
 
   const handleInterviewAction = async (applicantId, newStatus) => {
     const applicant = applicants.find((candidate) => candidate.id === applicantId);
     if (!applicant) return;
 
+    if (isCurrentTeamCompleted(applicant) || isGlobalCompleted(applicant)) {
+      setFeedback('This candidate is already completed.');
+      return;
+    }
+
     if (newStatus === 'In Progress' && applicant.current_team && applicant.current_team !== teamLabel) {
       setFeedback(`Candidate is currently with ${applicant.current_team}.`);
       return;
     }
 
+    const previousTeamStatus = applicant.interview_status?.[teamLabel] || 'Not Started';
+    const previousByTeam = applicant.interview_status?._lastStatusByTeam || {};
     const newInterviewStatus = { ...(applicant.interview_status || {}), [teamLabel]: newStatus };
+
+    if (newStatus === 'Completed' && previousTeamStatus !== 'Completed') {
+      newInterviewStatus._lastStatusByTeam = {
+        ...previousByTeam,
+        [teamLabel]: previousTeamStatus,
+      };
+    }
     const appliedTeams = applicant.teams || [];
 
     let newCurrentStatus;
@@ -292,7 +385,12 @@ const TeamDashboard = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredCandidates.length > 0 ? filteredCandidates.map((applicant) => (
+            {filteredCandidates.length > 0 ? filteredCandidates.map((applicant) => {
+              const actionLockReason = getActionLockReason(applicant);
+              const hardDisabled = actionLockReason === 'other-team';
+              const completionLocked = actionLockReason === 'completed';
+
+              return (
               <TableRow key={applicant.id} className="group">
                 <TableCell>
                   <div className="font-semibold text-slate-900 group-hover:text-indigo-700 transition-colors">{applicant.name}</div>
@@ -324,27 +422,51 @@ const TeamDashboard = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleInterviewAction(applicant.id, 'In Progress')}
-                      disabled={isActionDisabled(applicant)}
-                      className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                      onClick={() => {
+                        if (completionLocked) {
+                          setFeedback('Team status is locked. Double-click a button to unlock.');
+                          return;
+                        }
+
+                        handleInterviewAction(applicant.id, 'In Progress');
+                      }}
+                      onDoubleClick={() => handleUnlockCompleted(applicant)}
+                      disabled={hardDisabled}
+                      className={`border-blue-200 text-blue-700 hover:bg-blue-50 ${completionLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <PlayCircle className="w-4 h-4 mr-1.5" /> Start
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleInterviewAction(applicant.id, 'On Hold')}
-                      disabled={isActionDisabled(applicant)}
-                      className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                      onClick={() => {
+                        if (completionLocked) {
+                          setFeedback('Team status is locked. Double-click a button to unlock.');
+                          return;
+                        }
+
+                        handleInterviewAction(applicant.id, 'On Hold');
+                      }}
+                      onDoubleClick={() => handleUnlockCompleted(applicant)}
+                      disabled={hardDisabled}
+                      className={`border-amber-200 text-amber-700 hover:bg-amber-50 ${completionLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <PauseCircle className="w-4 h-4 mr-1.5" /> Hold
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleInterviewAction(applicant.id, 'Completed')}
-                      disabled={isActionDisabled(applicant)}
-                      className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                      onClick={() => {
+                        if (completionLocked) {
+                          setFeedback('Team status is locked. Double-click a button to unlock.');
+                          return;
+                        }
+
+                        handleInterviewAction(applicant.id, 'Completed');
+                      }}
+                      onDoubleClick={() => handleUnlockCompleted(applicant)}
+                      disabled={hardDisabled}
+                      className={`border-emerald-200 text-emerald-700 hover:bg-emerald-50 ${completionLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <CheckCircle2 className="w-4 h-4 mr-1.5" /> Pass
                     </Button>
@@ -356,7 +478,8 @@ const TeamDashboard = () => {
                   )}
                 </TableCell>
               </TableRow>
-            )) : (
+            );
+            }) : (
               <TableRow>
                 <TableCell colSpan={5} className="h-40 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
