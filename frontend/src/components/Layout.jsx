@@ -17,7 +17,7 @@ export function Layout() {
 
   const handleLogout = async () => {
     await logActivity(user.username, `Logged out`);
-    logout();
+    await logout();
     navigate("/login");
   };
 

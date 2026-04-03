@@ -1,29 +1,21 @@
 export const TEAM_DEFINITIONS = [
-  { displayName: 'DJS KRONOS', routeId: 'kronos', username: 'kronos', password: 'ember' },
-  { displayName: 'DJS PHOENIX', routeId: 'phoenix', username: 'phoenix', password: 'atlas' },
-  { displayName: 'DJS MILES', routeId: 'miles', username: 'miles', password: 'orbit' },
-  { displayName: 'DJS RACING', routeId: 'racing', username: 'racing', password: 'pulse' },
-  { displayName: 'DJS KARTING', routeId: 'karting', username: 'karting', password: 'velvet' },
-  { displayName: 'DJS IMPULSE', routeId: 'impulse', username: 'impulse', password: 'cedar' },
-  { displayName: 'DJS ASTRA', routeId: 'astra', username: 'astra', password: 'drift' },
-  { displayName: 'DJS SKYLARK', routeId: 'skylark', username: 'skylark', password: 'nexus' },
-  { displayName: 'DJS SPEEDSTERS', routeId: 'speedsters', username: 'speedsters', password: 'grove' },
-  { displayName: 'DJS HELIOS', routeId: 'helios', username: 'helios', password: 'prism' },
-  { displayName: 'DJS ROBOCON', routeId: 'robocon', username: 'robocon', password: 'torque' },
+  { displayName: 'DJS KRONOS', routeId: 'kronos', username: 'kronos' },
+  { displayName: 'DJS PHOENIX', routeId: 'phoenix', username: 'phoenix' },
+  { displayName: 'DJS MILES', routeId: 'miles', username: 'miles' },
+  { displayName: 'DJS RACING', routeId: 'racing', username: 'racing' },
+  { displayName: 'DJS KARTING', routeId: 'karting', username: 'karting' },
+  { displayName: 'DJS IMPULSE', routeId: 'impulse', username: 'impulse' },
+  { displayName: 'DJS ASTRA', routeId: 'astra', username: 'astra' },
+  { displayName: 'DJS SKYLARK', routeId: 'skylark', username: 'skylark' },
+  { displayName: 'DJS SPEEDSTERS', routeId: 'speedsters', username: 'speedsters' },
+  { displayName: 'DJS HELIOS', routeId: 'helios', username: 'helios' },
+  { displayName: 'DJS ROBOCON', routeId: 'robocon', username: 'robocon' },
 ];
-
-export const ADMIN_CREDENTIAL = {
-  username: 'admin',
-  password: 'admin',
-};
 
 export const TEAM_LABELS = TEAM_DEFINITIONS.map((team) => team.displayName);
 
 export const getTeamByRouteId = (routeId) =>
   TEAM_DEFINITIONS.find((team) => team.routeId === routeId);
-
-export const getTeamByUsername = (username) =>
-  TEAM_DEFINITIONS.find((team) => team.username === username);
 
 export const buildInterviewStatus = (teams = []) =>
   teams.reduce((statusMap, team) => {

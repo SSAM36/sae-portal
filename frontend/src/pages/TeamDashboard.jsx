@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -19,6 +19,7 @@ const TeamDashboard = () => {
   const [branchFilter, setBranchFilter] = useState('All');
   const [sortMode, setSortMode] = useState('name-asc');
   const [feedback, setFeedback] = useState('');
+  const deferredSearch = useDeferredValue(search);
   const teamConfig = getTeamByRouteId(teamName);
   const teamLabel = teamConfig?.displayName || String(teamName || '').toUpperCase();
 
@@ -120,31 +121,35 @@ const TeamDashboard = () => {
     return <Badge variant="muted">{status}</Badge>;
   };
 
-  const arrivedCandidates = applicants.filter((applicant) => applicant.arrived);
-  const branchCounts = arrivedCandidates.reduce((acc, applicant) => {
+  const arrivedCandidates = useMemo(() => applicants.filter((applicant) => applicant.arrived), [applicants]);
+
+  const branchCounts = useMemo(() => arrivedCandidates.reduce((acc, applicant) => {
     const key = String(applicant.branch || 'Other');
     acc[key] = (acc[key] || 0) + 1;
     return acc;
-  }, {});
+  }, {}), [arrivedCandidates]);
 
-  const filteredCandidates = [...arrivedCandidates]
-    .filter((candidate) => {
-      const query = search.toLowerCase();
-      const branch = String(candidate.branch || 'Other');
-      const matchesQuery =
-        candidate.name.toLowerCase().includes(query) ||
-        candidate.sap_id.toLowerCase().includes(query) ||
-        branch.toLowerCase().includes(query);
+  const filteredCandidates = useMemo(() => {
+    const query = deferredSearch.toLowerCase();
 
-      const matchesBranch = branchFilter === 'All' || branch === branchFilter;
-      return matchesQuery && matchesBranch;
-    })
-    .sort((a, b) => {
-      if (sortMode === 'dept-asc') return String(a.branch || 'Other').localeCompare(String(b.branch || 'Other'));
-      if (sortMode === 'dept-desc') return String(b.branch || 'Other').localeCompare(String(a.branch || 'Other'));
-      if (sortMode === 'name-desc') return String(b.name || '').localeCompare(String(a.name || ''));
-      return String(a.name || '').localeCompare(String(b.name || ''));
-    });
+    return [...arrivedCandidates]
+      .filter((candidate) => {
+        const branch = String(candidate.branch || 'Other');
+        const matchesQuery =
+          candidate.name.toLowerCase().includes(query) ||
+          candidate.sap_id.toLowerCase().includes(query) ||
+          branch.toLowerCase().includes(query);
+
+        const matchesBranch = branchFilter === 'All' || branch === branchFilter;
+        return matchesQuery && matchesBranch;
+      })
+      .sort((a, b) => {
+        if (sortMode === 'dept-asc') return String(a.branch || 'Other').localeCompare(String(b.branch || 'Other'));
+        if (sortMode === 'dept-desc') return String(b.branch || 'Other').localeCompare(String(a.branch || 'Other'));
+        if (sortMode === 'name-desc') return String(b.name || '').localeCompare(String(a.name || ''));
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+  }, [arrivedCandidates, deferredSearch, branchFilter, sortMode]);
 
   return (
     <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 max-w-6xl mx-auto">

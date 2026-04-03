@@ -7,7 +7,15 @@ import LogsDashboard from "./pages/LogsDashboard.jsx";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 
 const ProtectedRoute = ({ allowedRoles = [] }) => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">
+        Checking access...
+      </div>
+    );
+  }
   
   if (!user) {
     return <Navigate to="/login" replace />;

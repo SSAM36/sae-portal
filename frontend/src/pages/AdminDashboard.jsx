@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
@@ -107,6 +107,7 @@ const AdminDashboard = () => {
   const [branchFilter, setBranchFilter] = useState('All');
   const [sortMode, setSortMode] = useState('name-asc');
   const [feedback, setFeedback] = useState('');
+  const deferredSearch = useDeferredValue(search);
 
   useEffect(() => {
     fetchApplicants();
@@ -379,7 +380,7 @@ const AdminDashboard = () => {
   };
 
   const filteredApplicants = useMemo(() => {
-    const query = search.toLowerCase();
+    const query = deferredSearch.toLowerCase();
     const byQuery = applicants.filter((applicant) => {
       const preferenceList = applicant.teams || [];
       const branch = String(applicant.branch || 'Other');
@@ -403,7 +404,7 @@ const AdminDashboard = () => {
     });
 
     return sorted;
-  }, [applicants, search, branchFilter, sortMode]);
+  }, [applicants, deferredSearch, branchFilter, sortMode]);
 
   const branchCounts = useMemo(() => {
     const counts = applicants.reduce((acc, applicant) => {

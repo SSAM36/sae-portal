@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Lock, Users } from 'lucide-react';
-import { ADMIN_CREDENTIAL, TEAM_DEFINITIONS, getTeamByUsername } from '../data/interviewTeams';
+import { TEAM_DEFINITIONS } from '../data/interviewTeams';
 
 export const Login = () => {
   const [username, setUsername] = useState('');
@@ -17,23 +17,19 @@ export const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    const userStr = username.toLowerCase().trim();
-    const teamCred = getTeamByUsername(userStr);
-    const isAdmin = userStr === ADMIN_CREDENTIAL.username;
+    try {
+      const userObj = await login({ username, password });
+      const userStr = String(userObj?.username || username).toLowerCase().trim();
+      await logActivity(userStr, 'Logged in successfully');
 
-    if ((isAdmin && password === ADMIN_CREDENTIAL.password) || (teamCred && teamCred.password === password)) {
-      const userObj = isAdmin
-        ? { username: userStr, role: 'admin', team: 'admin', teamLabel: 'Admin' }
-        : { username: userStr, role: 'team', team: teamCred.routeId, teamLabel: teamCred.displayName };
-
-      login(userObj);
-      await logActivity(userStr, `Logged in successfully`);
-      if (isAdmin) {
+      if (userObj?.role === 'admin') {
         navigate('/admin');
+      } else if (userObj?.team) {
+        navigate(`/team/${userObj.team}`);
       } else {
-        navigate(`/team/${teamCred.routeId}`);
+        navigate('/');
       }
-    } else {
+    } catch (err) {
       setError('Invalid credentials.');
     }
   };
