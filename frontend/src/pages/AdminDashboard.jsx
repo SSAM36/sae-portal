@@ -172,7 +172,7 @@ const AdminDashboard = () => {
       name: record.name,
       sap_id: duplicateOrigin ? makeDuplicateSapId(record.sap_id, suffixSeed) : record.sap_id,
       phone_number: record.phone_number,
-      branch: record.branch || 'Other',
+      department: record.branch || record.department || 'Other',
       teams,
       arrived: false,
       current_status: duplicateOrigin ? 'Not Arrived (Duplicate SAP)' : 'Not Arrived',
@@ -190,7 +190,10 @@ const AdminDashboard = () => {
     }
 
     const baseCandidate = {
-      ...newApplicant,
+      name: newApplicant.name,
+      sap_id: newApplicant.sap_id,
+      phone_number: newApplicant.phone_number,
+      department: newApplicant.branch || 'Other',
       teams: selectedPreferences,
       arrived: true,
       current_status: 'Arrived',
