@@ -378,7 +378,14 @@ const AdminDashboard = () => {
         const parsed = rows.map((row) => ({
           name: String(getCellValue(row, (header) => header.includes('name')) || '').trim(),
           sap_id: String(getCellValue(row, (header) => header.includes('sap')) || '').trim(),
-          phone_number: String(getCellValue(row, (header) => header.includes('phone')) || '').trim(),
+          phone_number: String(
+            getCellValue(row, (header) =>
+              header.includes('phone') ||
+              header.includes('contact') ||
+              header.includes('whatsapp') ||
+              header.includes('mobile')
+            ) || ''
+          ).trim(),
           branch: getBranchValue(row) || 'Other',
           teams: getPreferenceValues(row),
         }));

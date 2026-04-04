@@ -22,8 +22,6 @@ const COOKIE_NAME = 'sae_session';
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_LIMIT = 6;
-const MAX_ADMIN_SESSIONS = 4;
-const MAX_TEAM_SESSIONS = 1;
 
 if (!SESSION_SECRET) {
   throw new Error('SESSION_SECRET must be set for backend auth.');
@@ -48,19 +46,6 @@ const purgeExpiredSessions = () => {
       activeSessions.delete(token);
     }
   }
-};
-
-const countActiveSessions = (predicate) => {
-  purgeExpiredSessions();
-  let count = 0;
-
-  for (const session of activeSessions.values()) {
-    if (predicate(session)) {
-      count += 1;
-    }
-  }
-
-  return count;
 };
 
 const registerSession = (token, session) => {
@@ -216,20 +201,6 @@ const resolveUserCredentials = (username) => {
   return { username, role: 'team', team: username, teamLabel: username.toUpperCase(), password };
 };
 
-const canCreateSession = (user) => {
-  purgeExpiredSessions();
-
-  if (user.role === 'admin') {
-    return countActiveSessions((session) => session.role === 'admin') < MAX_ADMIN_SESSIONS;
-  }
-
-  if (user.role === 'team') {
-    return countActiveSessions((session) => session.role === 'team' && session.team === user.team) < MAX_TEAM_SESSIONS;
-  }
-
-  return true;
-};
-
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
@@ -287,13 +258,6 @@ app.post('/auth/login', (req, res) => {
   clearLoginAttempts(loginKey);
 
   const sessionUser = sanitizeUser(credentials);
-  if (!canCreateSession(sessionUser)) {
-    const message = sessionUser.role === 'admin'
-      ? 'Admin login limit reached. Try again later.'
-      : `Team ${sessionUser.team} is already logged in.`;
-    return res.status(429).json({ error: message });
-  }
-
   const token = createSignedToken({ ...sessionUser, exp: Date.now() + SESSION_TTL_MS });
   registerSession(token, { ...sessionUser, exp: Date.now() + SESSION_TTL_MS });
   setAuthCookie(res, token);
